@@ -1,0 +1,108 @@
+## Hypothesis: Assets oscillate around their mean value in the short term. So, if an assets price falls significantly below its mean, the most probable occurence is for that price to rise back to the mean. 
+# Plan: To accept or refute this hypothesis, I will analyze the probability of a positive return x days after the price has fallen significantly below its mean. To quantify a significant fall below the mean, I will be using z scores. 
+if(!require(quantmod)){
+  install.packages('quantmod')
+}
+if(!require(dplyr)){
+  install.packages('dplyr')
+}
+if(!require(tidyr)){
+  install.packages('tidyr')
+}
+library(quantmod)
+library(dplyr)
+library(tidyr)
+# Get oil futures data
+assets <- c('SPY')
+getSymbols(assets, from = '2000-01-01', to = Sys.Date())
+SP500 <- as.data.frame(SPY) 
+# Calculate one, ten, and three day return.
+SP500$oneret <- (lead(SP500$SPY.Close, 1) - SP500$SPY.Close) / SP500$SPY.Close
+SP500$tworet <- (lead(SP500$SPY.Close, 2) - SP500$SPY.Close) / SP500$SPY.Close
+SP500$threeret <- (lead(SP500$SPY.Close, 3) - SP500$SPY.Close) / SP500$SPY.Close
+SP500$fourret <- (lead(SP500$SPY.Close, 4) - SP500$SPY.Close) / SP500$SPY.Close
+# Calculate z score
+zscore <- function(x, runmean = 21, runsd = 21){
+  mean <- runMean(x, n = runmean)
+  sd <- runSD(x, n = runsd)
+  z <- (x - mean)/sd
+  return(z)
+}
+SP500$zscore <- zscore(x = SP500$SPY.Close)
+SP500 <- na.omit(SP500)
+# Begin gathering data to calculate probabilities
+#### Gather high outliers
+# These filter for a negative return because a short strategy would be used to profit off of high outliers.
+High_outliers <- SP500 %>%
+  filter(zscore >= 2.5)
+oneneg <- High_outliers %>%
+  filter(oneret < 0)
+twoneg <- High_outliers %>%
+  filter(tworet < 0)
+threeneg <- High_outliers %>%
+  filter(threeret < 0)
+fourneg <- High_outliers %>%
+  filter(fourret < 0)
+##################
+### Gather low outliers
+# These filter for a positive return because a long strategy would be used to profit off of low outliers.
+Low_outliers <- SP500 %>%
+  filter(zscore <= -2.5)
+onepos <- Low_outliers %>%
+  filter(oneret > 0) 
+twopos <- Low_outliers %>%
+  filter(tworet > 0) 
+threepos <- Low_outliers %>%
+  filter(threeret > 0) 
+fourpos <- Low_outliers %>%
+  filter(fourret > 0) 
+######################
+#### Count pos and neg returns for any day
+anyonepos <- SP500 %>%
+  filter(oneret > 0)
+anytwopos <- SP500 %>%
+  filter(tworet > 0)
+anythreepos <- SP500 %>%
+  filter(threeret > 0)
+anyfourpos <- SP500 %>%
+  filter(fourret > 0)
+##################
+### Anyday negative returns
+anyoneneg <- SP500 %>%
+  filter(oneret < 0)
+anytwoneg <- SP500 %>%
+  filter(tworet < 0)
+anythreeneg <- SP500 %>%
+  filter(threeret < 0)
+anyfourneg <- SP500 %>%
+  filter(fourret < 0)
+# Calculate probabilities
+one_low <- length(onepos$oneret) / length(Low_outliers$oneret)
+two_low <- length(twopos$tworet) / length(Low_outliers$tworet)
+three_low <- length(threepos$threeret) / length(Low_outliers$threeret)
+four_low <- length(fourpos$fourret) / length(Low_outliers$fourret)
+one_high <- length(oneneg$oneret) / length(High_outliers$oneret)
+two_high <- length(twoneg$tworet) / length(High_outliers$tworet)
+three_high <- length(threeneg$threeret) / length(High_outliers$threeret)
+four_high <- length(fourneg$fourret) / length(High_outliers$fourret)
+any_one_pos <- length(anyonepos$oneret) / length(SP500$oneret)
+any_two_pos <- length(anytwopos$tworet) / length(SP500$tworet)
+any_three_pos <- length(anythreepos$threeret) / length(SP500$threeret)
+any_four_pos <- length(anyfourpos$fourret) / length(SP500$fourret)
+any_one_neg <- length(anyoneneg$oneret) / length(SP500$oneret)
+any_two_neg <- length(anytwoneg$tworet) / length(SP500$tworet)
+any_three_neg <- length(anythreeneg$threeret) / length(SP500$threeret)
+any_four_neg <- length(anyfourneg$fourret) / length(SP500$fourret)
+dfone <- c(one_high, one_low, any_one_pos, any_one_neg) * 100
+dftwo <- c(two_high, two_low, any_two_pos, any_two_neg) * 100
+dfthree <- c(three_high, three_low, any_three_pos, any_three_neg) * 100
+dffour <- c(four_high, four_low, any_four_pos, any_four_neg) * 100
+# Probability table
+prob_table <- data.frame(dfone, dftwo, dfthree, dffour)
+colnames(prob_table) <- c('1 day', '2 days', '3 days', '4 days')
+rownames(prob_table) <- c('High Outlier', 'Low Outlier', 'Any Day Pos', 'Any Day Neg')
+prob_table
+# Clearly, both low and high outliers beat their benchmark over the short term. 
+# I believe mean reversion to the short side (high outliers) works better over a short period because prices fall faster than they rise.
+# The opposite is also true. Mean reversion to the long side works better on a longer time period because prices rise slower than they fall.
+# The next step would be to find the p value 
