@@ -1,1 +1,91 @@
+# This code looks to find the best parameters for the RSI while avoiding overfitting
+## Load libraries ##
+if(!require(quantstrat)){
+  install.packages("devtools")
+  require(devtools)
+  install_github("braverock/blotter") # dependency
+  install_github("braverock/quantstrat")
+  install_github('IlyaKipnis/IKTrading')
+}
+library(quantstrat)
+library(IKTrading)
+## Retrieve data ##
+stocks <- c('XLF', 'XLE', 'XLV', 'XLRE', 'XLK') 
+initdate <- "1999-01-01"
+from <- "2015-01-01"
+to <- "2020-01-01" # I am optimizing up to about 3 years ago so I have enough data to forward test the RSI parameters
+getSymbols(stocks, from = from, to = to, src = "yahoo", adjust = TRUE)
+## Settings ##
+.stoploss <- .06
+.txnfees <- .0
+stoploss_enabled <- TRUE
+initialequity <- 100000
+tradesize <- initialequity / length(stocks)
+## Initialize Portfolio Objects ##
+Sys.setenv(TZ = "UTC")
+currency("USD")
+for(stock in stocks) {
+  stock(stock, currency = "USD", multiplier = 1)
+}
+strategy.st <- portfolio.st <- account.st <- "backtest"
+rm.strat(strategy.st)
+initPortf(portfolio.st, symbols = stocks, initDate = initdate, currency = "USD")
+initAcct(account.st, portfolios = portfolio.st, symbols = stocks, initDate = initdate, currency = "USD", initEq = initialequity)
+initOrders(portfolio.st, initDate = initdate)
+for(stock in stocks) {
+  addPosLimit(portfolio.st, symbol = stock, timestamp = initdate, maxpos = 1, minpos = -1)
+  
+}
+strategy(strategy.st, store = TRUE)
+## Add Indicators to Strategy ##
+add.indicator(strategy.st, name = "RSI", arguments = list(price = quote(Cl(mktdata)), n = 14), label = "RSI14") # Most sources reccomend an RSI of 14 periods
+# Test indicators 
+test <- applyIndicators(strategy= strategy.st, mktdata = OHLC(XLF))
+head(test)
+## Add Signals to Strategy
+add.signal(strategy.st, name = "sigThreshold", arguments = list(column = c("RSI14"), threshold = 30, relationship = "gt", cross = TRUE), label = "oversold")
+add.signal(strategy.st, name = "sigThreshold", arguments = list(column = c("RSI14"), threshold = 70, relationship = "gte", cross = TRUE), label = "overbought")
+## Add Rules to Strategy
+add.rule(strategy.st, name = "ruleSignal", arguments = list(sigcol = "oversold", sigval = TRUE, ordertype = "market", orderside = "long", replace = FALSE, TxnFees = .txnfees, prefer = "Close", orderset = "longrule", osFUN = osMaxDollar, tradeSize = tradesize, maxSize = tradesize),  type = "enter", label = "longenter")
+add.rule(strategy.st, name = "ruleSignal", arguments = list(sigcol = "overbought", sigval = TRUE, orderqty = "all", ordertype = "market", orderside = "long", replace = FALSE, TxnFees = .txnfees, prefer = "Close", orderset = "longrule"), type = "exit", label = "longexit")
+add.rule(strategy.st, name = "ruleSignal", arguments = list(sigcol = "overbought", sigval = TRUE, orderqty = "all", ordertype = "stoplimit", tmult = TRUE, threshold = quote(.stoploss), orderside = "long", replace = FALSE, TxnFees = .txnfees, prefer = "Close", orderset = "longrule"), type = "chain", parent = "longenter", label = "longstop", enabled = FALSE)
+if(stoploss_enabled == TRUE) {
+enable.rule(strategy.st, 
+            type = "chain", 
+            label = "longstop")
+}
+## Apply Strategy ##
+applyStrategy(strategy = strategy.st, portfolios = portfolio.st)
+updatePortf(portfolio.st)
+daterange <- time(getPortfolio(portfolio.st)$summary)[-1]
+updateAcct(account.st, daterange)
+updateEndEq(account.st)
+##################################
+#### OPTIMIZATION ################
+add.distribution(strategy.st, paramset.label = "RSI",
+                 component.type = "indicator", component.label = "RSI14",
+                 variable = list(n = 1:14), label = "rsi") #Test every RSI lookback value from 1:14
 
+set.seed(2017052319)  
+results <- apply.paramset(strategy.st,  
+                          paramset.label = "RSI",  
+                          portfolio.st = portfolio.st,
+                          account.st = account.st,  
+                          nsamples = 40)  
+                                          
+library(dplyr)
+(profit_dat <- results$tradeStats %>%
+  select(rsi, Portfolio, End.Equity, Ann.Sharpe, Percent.Positive) %>%
+  group_by(Portfolio) %>%
+  summarize(rsi_param = rsi,
+            Profit = sum(End.Equity),
+            Sharpe = mean(Ann.Sharpe),
+            Positive = mean(Percent.Positive)) %>%
+  select(rsi_param, Profit, Sharpe, Positive) %>%
+  arrange(desc(Profit)))
+plot(Profit ~ rsi_param, data = profit_dat, main = "Profit per RSI Value")
+plot(Sharpe ~ rsi_param, data = profit_dat, main = "Sharpe Ratio per RSI Value")
+plot(Positive ~ rsi_param, data = profit_dat, main = "% Positive per RSI Value")
+# It looks like an RSI period of 4 is the most profitable and accurate value
+# The next step from here would be to forward test this parameter 
+# One of the simplest methodologies to forward test would be to compare the correlation of 2017-2020's backtest and 2020-2022-10-25's forward test
