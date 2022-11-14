@@ -1,5 +1,4 @@
-## Hypothesis: Assets oscillate around their mean value in the short term. So, if an assets price falls significantly below its mean, the most probable occurence is for that price to rise back to the mean. 
-# Plan: To accept or refute this hypothesis, I will analyze the probability of a positive return x days after the price has fallen significantly below its mean. To quantify a significant fall below the mean, I will be using z scores. 
+# Plan: To accept or refute my hypothesis, I will analyze the probability of a positive return x days after the price has fallen significantly below its mean. To quantify a significant fall below the mean, I will be using z scores. 
 if(!require(quantmod)){
   install.packages('quantmod')
 }
