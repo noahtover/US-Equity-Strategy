@@ -1,4 +1,5 @@
 ## This strategy trades the RSI (a mean reversion indicator) when volatility isn't extremley high
+# This strategy is long only
 ## Load libraries ##
 if(!require(quantstrat)){
   install.packages("devtools")
@@ -10,7 +11,7 @@ if(!require(quantstrat)){
 library(quantstrat)
 library(IKTrading)
 ## Retrieve data ##
-stocks <- c('MS') # I'm only using MS to compare the strategy against SPY. Its already been tested against many sectors + bank stocks, it just performed best on MS
+stocks <- c('MS', 'JPM', 'GS', 'UBS', 'XLF', 'C') 
 initdate <- "1999-01-01"
 from <- "2015-01-01"
 to <- Sys.Date()
@@ -77,17 +78,26 @@ updateEndEq(account.st)
 tradeStats(Portfolios = portfolio.st)
 portPL <- .blotter$portfolio.backtest$summary$Net.Trading.PL
 SharpeRatio.annualized(portPL, geometric = FALSE) #Profit/Loss Sharpe
+for(stock in stocks){
 chart.Posn(Portfolio=portfolio.st,Symbol=stock)
+}
 final_acct <- getAccount(account.st)
-plot(final_acct$summary$End.Eq["2010/2022-10-23"], main = "Portfolio Equity Curve")
+equity_curve <- final_acct$summary$End.Eq["2010/2022-10-23"]
+plot(equity_curve, main = "Portfolio Equity Curve")
 ## Calculate annualized trade stats + return based sharpe ratio
 getSymbols('SPY', from = from, to = to) #Benchmarking against SPY
-rets <- Return.calculate(final_acct$summary$End.Eq)
-msrets <- Return.calculate(Cl(MS))
-spyrets <- Return.calculate(Cl(SPY))
-ms <- c(StdDev.annualized(msrets) * 100, Return.annualized(msrets) * 100, SharpeRatio.annualized(msrets))
-spy <- c(StdDev.annualized(spyrets) * 100, Return.annualized(spyrets) * 100, SharpeRatio.annualized(spyrets))
-strat <- c(StdDev.annualized(rets) * 100, Return.annualized(rets) * 100, SharpeRatio.annualized(rets))
-additional_trade_stats <- data.frame(ms, spy, strat)
+additional_tstats <- function(symbol, benchmark, strat){
+rets <- Return.calculate(strat)
+symbolrets <- Return.calculate(Cl(symbol))
+benchmarkrets <- Return.calculate(Cl(benchmark))
+symbolstats <- c(StdDev.annualized(symbolrets) * 100, Return.annualized(symbolrets) * 100, SharpeRatio.annualized(symbolrets))
+benchmarkstats <- c(StdDev.annualized(benchmarkrets) * 100, Return.annualized(benchmarkrets) * 100, SharpeRatio.annualized(benchmarkrets))
+stratstats <- c(StdDev.annualized(rets) * 100, Return.annualized(rets) * 100, SharpeRatio.annualized(rets))
+additional_trade_stats <- data.frame(symbolstats, benchmarkstats, stratstats)
+colnames(additional_trade_stats) <- c(colnames(symbolrets), colnames(benchmarkrets), 'Strategy')
 row.names(additional_trade_stats) <- c('Annualized Std Dev %', 'Annualized Return %', 'Sharpe Ratio')
-additional_trade_stats
+return(print(additional_trade_stats))
+}
+for(stock in stocks){
+  additional_tstats(symbol = get(stock), benchmark = SPY, strat = equity_curve)
+}
