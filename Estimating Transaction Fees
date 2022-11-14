@@ -1,1 +1,2 @@
-
+# Goal - Supply a dataset containing cost of margin for each trade.
+# Plan: Use getTxns() to get all transactions. Find difference in days between each consecutive row. Find total investment. Iterate over dataset with interest function. Use results to model transaction fees in quantstrat.
