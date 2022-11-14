@@ -1,2 +1,3 @@
 # US-Equity-Strategy
-This repository contains the code used to develop my mean reversion strategy on US equities. 
+This repository contains the code used to develop my mean reversion strategy on US equities. Mean reversion is a very common quantitative strategy along with trend following and sentiment. My hypothesis is that assets oscillate around their mean value in the short term. So, if an assets price falls significantly below its mean, the most probable occurence is for that price to rise back to the mean. I believe this is because of investor sentiment. In the short term, investors overreact the price changes, news, or other influences. However, this overreaction is later balanced out, resulting in the pattern of mean reversion.
+
